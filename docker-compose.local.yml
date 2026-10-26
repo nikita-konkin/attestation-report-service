@@ -1,0 +1,8 @@
+# Локальная проверка: http://localhost:8002/attestation. Cookie сеанса по HTTP браузер
+# с флагом Secure не сохранит, поэтому здесь он выключен — только для своей машины.
+services:
+    attestation:
+        ports:
+            - "127.0.0.1:8002:8002"
+        environment:
+            - ATTESTATION_COOKIE_SECURE=0

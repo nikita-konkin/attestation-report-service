@@ -1,0 +1,38 @@
+# «Отчёт по аттестации» — отдельный сервис сайта пгту-ртф.рф.
+# Наружу порт не открыт: страницу /attestation отдаёт nginx сайта (deploy/nginx-location.conf).
+#   локально:    docker compose -f docker-compose.yml -f docker-compose.local.yml up --build
+#   на сервере:  docker compose -f docker-compose.yml -f deploy/server.yml up -d --build
+services:
+    attestation:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        image: attestation-report-service
+        container_name: attestation-report
+        expose:
+            - 8002
+        environment:
+            - PYTHONUNBUFFERED=1
+            - LOG_LEVEL=INFO
+            - LOG_DIR=/app/logs
+            - ATTESTATION_DATA_DIR=/app/data
+            - ATTESTATION_COOKIE_SECURE=${ATTESTATION_COOKIE_SECURE:-1}
+            - ATTESTATION_FILES_TTL=${ATTESTATION_FILES_TTL:-1800}
+        volumes:
+            - ./logs:/app/logs
+            # departments.json: направления групп, которые отметила каждая кафедра
+            - attestation-data:/app/data
+        healthcheck:
+            test:
+                [
+                    "CMD-SHELL",
+                    'python -c "import urllib.request; urllib.request.urlopen(''http://localhost:8002/health'', timeout=2)"',
+                ]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+            start_period: 10s
+        restart: unless-stopped
+
+volumes:
+    attestation-data:

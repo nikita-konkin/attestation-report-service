@@ -36,7 +36,7 @@ ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 # One worker: sessions and jobs live in this process's memory
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8002", "--workers", "1"]
 
-# The image is built only when the tests pass (B-20).
+# The image is built only when the tests pass: CI and the server build the same stages.
 FROM app AS test
 COPY requirements-test.txt .
 RUN pip install --no-cache-dir -r requirements-test.txt

@@ -1,0 +1,30 @@
+# OS and IDEs
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Python
+**/__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# Runtime output: logs and department presets of a local run
+logs/
+data/
+*.log
+
+# Real student data must never be committed: exports, workbooks and built reports
+*.xml
+*.xlsx
+*.xls
+*.docx
+*.pdf
+*.png
+attestation_report*.md
+attestation_report*.json
+
+# Local settings
+.env
+.mcp.json

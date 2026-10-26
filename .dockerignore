@@ -4,3 +4,8 @@
 *.xlsx
 *.xls
 data/
+.git
+.github
+logs/
+deploy/
+*.md

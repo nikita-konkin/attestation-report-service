@@ -1,7 +1,17 @@
-# python-attestation-engine
+# attestation-report-service
 
-Отчёты об аттестации групп кафедры по данным портала РИТМ. Отдельный компонент сайта:
-страница `/attestation` через шлюз `java-api` (`TkAttestation`). Вход — учётной записью РИТМ.
+[![CI](https://github.com/nikita-konkin/attestation-report-service/actions/workflows/ci.yml/badge.svg)](https://github.com/nikita-konkin/attestation-report-service/actions/workflows/ci.yml)
+
+«Отчёт по аттестации» на сайте [пгту-ртф.рф/attestation](https://xn----etb9agicel.xn--p1ai/attestation):
+отчёты об аттестации групп кафедры по данным портала РИТМ. Вход — учётной записью РИТМ, своих
+учётных записей у сервиса нет.
+
+Сервис отдельный от основного сайта ([diploma_supplement_service](https://github.com/nikita-konkin/diploma_supplement_service)),
+домен общий: nginx сайта ведёт `/attestation` прямо в контейнер `attestation-report`
+([deploy/nginx-location.conf](deploy/nginx-location.conf)), всё остальное — в основной сервис.
+До разделения сервис жил в основном репозитории в папке `python-attestation-engine`; история коммитов сохранена.
+
+## Что внутри
 
 - `app/main.py` — маршруты `/attestation/...`: вход, страница, списки факультетов, кафедр и групп, задачи, файлы.
 - `app/portal.py` — всё, что сервис спрашивает у портала; в тестах заменяется подделкой.
@@ -18,7 +28,18 @@
   `pdf_export.py` делает PDF из каждого DOCX через LibreOffice (он есть в образе) и подбирает сжатие картинок так,
   чтобы файл не превышал 2 МБ; без LibreOffice отчёты остаются в DOCX.
 
-Локальный запуск без Docker:
+## Защита
+
+- пароль РИТМ используется один раз для входа в портал и не сохраняется; сеанс портала живёт в памяти и забывается при выходе или после 30 минут бездействия;
+- cookie `HttpOnly; Secure; SameSite=Strict; Path=/attestation`, изменяющие запросы требуют CSRF-токен;
+- неудачные входы ограничены: 5 на клиента и 30 всего за 15 минут; адрес клиента — последний в `X-Forwarded-For`, его дописывает nginx;
+- CSP `default-src 'none'`, без встроенных скриптов и стилей; пароли не попадают в журналы;
+- выгруженные данные содержат ФИО и баллы студентов, поэтому файлы удаляются через `ATTESTATION_FILES_TTL` секунд (по умолчанию 30 минут);
+- реальных данных студентов в репозитории нет: тесты строят выгрузки в памяти (`tests/synthetic.py`), а `.gitignore` не пускает XML, DOCX, PDF и картинки.
+
+## Запуск
+
+Без Docker:
 
 ```sh
 python -m venv .venv && .venv/bin/pip install -r requirements-test.txt
@@ -27,5 +48,32 @@ PYTHONPATH=.:reports ATTESTATION_COOKIE_SECURE=0 ATTESTATION_DATA_DIR=./data \
   .venv/bin/uvicorn app.main:app --port 8002
 ```
 
-Тесты не обращаются к порталу и не используют реальные данные: `tests/synthetic.py` пишет
-выдуманные выгрузки в формате РИТМ.
+В Docker, на http://localhost:8002/attestation (тесты идут при сборке образа):
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.local.yml up --build
+```
+
+Тесты не обращаются к порталу и не используют реальные данные. Тесты PDF требуют LibreOffice
+и без него пропускаются; в образе и в CI он есть.
+
+## CI
+
+[GitHub Actions](.github/workflows/ci.yml) на каждый PR и push в `main`: проверяет compose и скрипты
+развёртывания и собирает образ — вместе с ним проходят все тесты, как при сборке на сервере.
+
+## Сервер
+
+192.168.50.117, папка `~/projects/attestation-report-service`, контейнер в сети `mynetwork` рядом с nginx
+сайта ([deploy/server.yml](deploy/server.yml)). Первая установка переносит сервис из `ssl-nginx-docker`
+и переключает nginx ([deploy/install.sh](deploy/install.sh)):
+
+```sh
+ssh -t liam@192.168.50.117 'git clone https://github.com/nikita-konkin/attestation-report-service.git ~/projects/attestation-report-service && bash ~/projects/attestation-report-service/deploy/install.sh'
+```
+
+Дальше — обновление с `main` ([deploy/update.sh](deploy/update.sh)), основной сайт при этом не пересобирается:
+
+```sh
+ssh -t liam@192.168.50.117 'bash ~/projects/attestation-report-service/deploy/update.sh'
+```

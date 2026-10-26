@@ -1,0 +1,44 @@
+# Тесты идут внутри сборки образа (этап test в Dockerfile): образ, который собирает CI, —
+# тот же, что собирает сервер, а упавший тест останавливает сборку.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  image:
+    name: Тесты и образ
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: compose для сервера и локального запуска читается
+        run: |
+          docker compose -f docker-compose.yml -f deploy/server.yml config -q
+          docker compose -f docker-compose.yml -f docker-compose.local.yml config -q
+
+      - name: Скрипты развёртывания без синтаксических ошибок
+        run: |
+          bash -n deploy/install.sh
+          bash -n deploy/update.sh
+          python3 -m py_compile deploy/patch_nginx.py deploy/unpatch_compose.py
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Сборка образа с тестами
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

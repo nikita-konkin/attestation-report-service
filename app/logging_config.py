@@ -44,7 +44,7 @@ def configure_logging(
     directory: Optional[Union[str, Path]] = None,
 ) -> Path:
     """Configure console, event, and error handlers for a service."""
-    default = Path(__file__).resolve().parents[2] / "logs"
+    default = Path(__file__).resolve().parents[1] / "logs"
     target = Path(directory or os.getenv("LOG_DIR", str(default)))
     target.mkdir(parents=True, exist_ok=True)
 
