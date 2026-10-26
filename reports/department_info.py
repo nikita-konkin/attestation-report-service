@@ -2,6 +2,9 @@
 
 Лежит в папке аттестации файлом department.json, его пишет make_report.build_all. Без файла
 (старые выгрузки, запуск из командной строки) — кафедра ИТРС.
+
+groups — отчёт только по этим группам кафедры, а не по всем группам выбранных направлений:
+тогда в отчётах нет того, что описывает кафедру целиком (место среди кафедр, её преподаватели).
 """
 
 from __future__ import annotations
@@ -18,6 +21,7 @@ class DepartmentInfo:
     name: str = "ИТРС"
     faculty_title: str = "Радиотехнический факультет"
     head_name: str = "И. О. Фамилия"
+    groups: tuple[str, ...] = ()
 
     def save(self, attestation_dir: Path) -> Path:
         path = attestation_dir / FILE_NAME
@@ -36,4 +40,5 @@ def load_department(attestation_dir: Path) -> DepartmentInfo:
         name=data.get("name") or default.name,
         faculty_title=data.get("faculty_title") or default.faculty_title,
         head_name=data.get("head_name") or default.head_name,
+        groups=tuple(data.get("groups") or ()),
     )

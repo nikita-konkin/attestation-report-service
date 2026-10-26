@@ -72,16 +72,21 @@ class Job:
         }
 
     def downloads(self) -> list[dict]:
-        """[{label: document, files: [{format, href, size}]}] in the order of RESULT_FILES."""
-        documents: dict[str, list[dict]] = {}
-        for key in self.files:
-            _, label, kind = RESULT_FILES[key]
+        return downloads(self.sizes, lambda key: f"/attestation/api/jobs/{self.id}/files/{key}")
+
+
+def downloads(sizes: dict[str, int], href: Callable[[str], str]) -> list[dict]:
+    """[{label: document, files: [{format, href, name, size}]}] in the order of RESULT_FILES."""
+    documents: dict[str, list[dict]] = {}
+    for key, (name, label, kind) in RESULT_FILES.items():
+        if key in sizes:
             documents.setdefault(label, []).append({
                 "format": kind,
-                "href": f"/attestation/api/jobs/{self.id}/files/{key}",
-                "size": file_size(self.sizes.get(key, 0)),
+                "href": href(key),
+                "name": Path(name).name,
+                "size": file_size(sizes[key]),
             })
-        return [{"label": label, "files": files} for label, files in documents.items()]
+    return [{"label": label, "files": files} for label, files in documents.items()]
 
 
 def file_size(size: int) -> str:

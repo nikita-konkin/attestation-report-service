@@ -52,6 +52,7 @@ def fetch_previous(
     log: Callable[[str], None],
     faculty: str,
     codes: set[str] | None,
+    names: set[str] | None = None,
 ) -> None:
     """Прошлая аттестация того же семестра — для динамики; уже выгруженная не скачивается заново."""
     if period.attestation <= 1:
@@ -64,7 +65,7 @@ def fetch_previous(
             ritm_fetch.fetch_level(
                 session, previous, level, root,
                 lambda message: log(f"Аттестация №{previous.attestation} для динамики. {message.strip()}"),
-                faculty, codes,
+                faculty, codes, names,
             )
         except ritm_fetch.RitmError as exc:
             # без прошлой аттестации отчёт всё равно строится, только без динамики
@@ -100,19 +101,21 @@ def build_all(
     """Выгрузка (если есть сеанс портала), анализ и все отчёты; возвращает папку аттестации.
 
     department, faculty и codes (направления групп, «ИТС(о)») задают кафедру; без них — ИТРС.
+    department.groups оставляет из групп этих направлений только выбранные.
     """
     documents: list[Path] = []
+    names = set(department.groups) if department is not None and department.groups else None
     attestation_dir = period.attestation_directory(root)
     if department is not None:
         department.save(attestation_dir)
     department_name = department.name if department is not None else ritm_fetch.DEPARTMENT_NAME
     if session is not None:
         ritm_fetch.fetch_kafedra_report(session, period, root, log, department_name)
-        fetch_previous(session, period, root, levels, log, faculty, codes)
+        fetch_previous(session, period, root, levels, log, faculty, codes, names)
     for level in levels:
         data_dir = period.directory(root, level)
         if session is not None:
-            ritm_fetch.fetch_level(session, period, level, root, log, faculty, codes)
+            ritm_fetch.fetch_level(session, period, level, root, log, faculty, codes, names)
         elif not data_dir.is_dir():
             raise ritm_fetch.RitmError(f"Нет папки с данными: {data_dir}")
 

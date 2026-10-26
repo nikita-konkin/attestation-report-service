@@ -33,3 +33,17 @@ def test_cannot_build_report_for_directions_without_groups(portal_groups):
     request = ReportRequest(Period(2026, True, 1), "1857", "ИТРС", frozenset({"НЕТ(о)"}), "РТФ", "")
     with pytest.raises(ritm_fetch.RitmError, match="нет групп"):
         RitmPortal().build(None, request, None, print)
+
+
+def test_cannot_fetch_group_that_was_not_chosen():
+    groups = [ritm_fetch.StudyGroup(group_id=name, name=name) for name in GROUPS["б"]]
+    chosen = ritm_fetch.department_groups(groups, {"ИТС(о)"}, {"ИТС(о)-21"})
+    assert [group.name for group in chosen] == ["ИТС(о)-21"], f"Fetched groups that were not chosen: {chosen}"
+
+
+def test_cannot_build_report_for_absent_groups(portal_groups):
+    request = ReportRequest(
+        Period(2026, True, 1), "1857", "ИТРС", frozenset({"ИТС(о)"}), "РТФ", "", frozenset({"ИТС(о)-99"})
+    )
+    with pytest.raises(ritm_fetch.RitmError, match="Выбранных групп нет"):
+        RitmPortal().build(None, request, None, print)

@@ -319,13 +319,17 @@ def group_code(name: str) -> str:
     return name.rsplit("-", 1)[0] if "-" in name else name
 
 
-def department_groups(groups: list[StudyGroup], codes: set[str] | None = None) -> list[StudyGroup]:
-    """Группы кафедры: по выбранным направлениям, без них — по шаблону групп ИТРС."""
+def department_groups(
+    groups: list[StudyGroup], codes: set[str] | None = None, names: set[str] | None = None
+) -> list[StudyGroup]:
+    """Группы кафедры: по выбранным направлениям, без них — по шаблону групп ИТРС; names — только эти группы."""
     selected = (
         (group for group in groups if group_code(group.name) in codes)
         if codes is not None
         else (group for group in groups if GROUP_PATTERN.match(group.name))
     )
+    if names:
+        selected = (group for group in selected if group.name in names)
     return sorted(selected, key=lambda group: group.name)
 
 
@@ -409,9 +413,10 @@ def fetch_level(
     log: Callable[[str], None] = print,
     faculty: str = FACULTY_ID,
     codes: set[str] | None = None,
+    names: set[str] | None = None,
 ) -> list[Path]:
     output_dir = period.directory(root_dir, level)
-    groups = department_groups(list_groups(session, period, level, faculty), codes)
+    groups = department_groups(list_groups(session, period, level, faculty), codes, names)
     if not groups:
         raise RitmError(f"Не найдено групп кафедры ({LEVEL_TITLES[level]}) для периода: {period.label}")
 

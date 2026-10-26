@@ -2,8 +2,11 @@
 
 A teacher logs in with the RITM portal account: the portal checks the password, the
 service keeps the portal's session in memory and forgets the password at once. On the
-page the teacher picks the period, faculty, department and its directions of groups, and
-the service builds the reports from the portal's data.
+page the teacher picks the period, faculty, department and its directions of groups (or only
+some groups of them), and the service builds the reports from the portal's data.
+
+A finished report can be shared: /attestation/share#<token> shows it without a login until the
+link expires or is revoked (see shares.py).
 """
 
 from __future__ import annotations
@@ -24,21 +27,26 @@ from fastapi import FastAPI, Form, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field
 
-from .jobs import JobRejected, JobRunner
+from .jobs import JobRejected, JobRunner, downloads
 from .logging_config import configure_logging
 from .portal import Period, ReportRequest, RitmPortal
 from .presets import Preset, Presets
 from .security import LoginLimiter, Session, SessionStore
+from .shares import LIFETIMES_DAYS, Share, ShareRejected, ShareStore
 
 configure_logging("python-attestation-engine")
 logger = logging.getLogger(__name__)
 
 BASE = "/attestation"
 COOKIE = "attestation_session"
+SHARE_HEADER = "x-share-token"
+SHARE_GONE = "Ссылка недействительна: срок её действия истёк или её отозвали."
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 STATIC_FILES = {
     "app.js": "text/javascript; charset=utf-8",
     "charts.js": "text/javascript; charset=utf-8",
+    "report.js": "text/javascript; charset=utf-8",
+    "share.js": "text/javascript; charset=utf-8",
     "style.css": "text/css; charset=utf-8",
 }
 LOGIN_ERRORS = {
@@ -93,8 +101,14 @@ class JobRequest(BaseModel):
     faculty: str = Field(..., pattern=r"^\d{1,10}$")
     department: str = Field(..., min_length=1, max_length=60)
     codes: list[str] = Field(..., min_length=1, max_length=60)
+    # empty: every group of the directions; otherwise only these groups of them
+    groups: list[str] = Field(default_factory=list, max_length=300)
     faculty_title: str = Field(..., min_length=1, max_length=200)
     head_name: str = Field("", max_length=100)
+
+
+class ShareRequest(BaseModel):
+    days: int
 
 
 def current_defaults(today: Optional[datetime] = None) -> tuple[int, bool]:
@@ -119,13 +133,19 @@ def create_app(settings: Settings, portal: Any = None) -> FastAPI:
     portal = portal if portal is not None else RitmPortal()
     sessions = SessionStore(settings.session_idle, settings.session_absolute)
     limiter = LoginLimiter(per_client=5, total=30, window_seconds=15 * 60)
+    # a token is 256 random bits, so this is not what stops guessing; it keeps junk requests cheap
+    share_limiter = LoginLimiter(per_client=30, total=1000, window_seconds=15 * 60)
     presets = Presets(settings.data_dir)
     runner = JobRunner(settings.files_ttl)
+    shares = ShareStore(settings.data_dir / "shares")
 
     def clean_up() -> None:
-        removed_jobs, removed_sessions = runner.cleanup(), sessions.sweep()
-        if removed_jobs or removed_sessions:
-            logger.info("Removed %d expired report jobs and %d sessions", removed_jobs, removed_sessions)
+        removed_jobs, removed_sessions, removed_shares = runner.cleanup(), sessions.sweep(), shares.cleanup()
+        if removed_jobs or removed_sessions or removed_shares:
+            logger.info(
+                "Removed %d expired report jobs, %d sessions and %d shared links",
+                removed_jobs, removed_sessions, removed_shares,
+            )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -149,6 +169,7 @@ def create_app(settings: Settings, portal: Any = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.sessions, app.state.limiter, app.state.presets, app.state.runner = sessions, limiter, presets, runner
+    app.state.shares = shares
 
     @app.middleware("http")
     async def protect(request: Request, call_next):
@@ -318,6 +339,7 @@ def create_app(settings: Settings, portal: Any = None) -> FastAPI:
         codes = frozenset(code.strip() for code in body.codes if code.strip() and len(code) <= 40)
         if not codes:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Отметьте хотя бы одно направление групп.")
+        groups = frozenset(name.strip() for name in body.groups if name.strip() and len(name) <= 40)
         report = ReportRequest(
             period=Period(body.year, body.odd_semester, body.attestation),
             faculty=body.faculty,
@@ -325,12 +347,18 @@ def create_app(settings: Settings, portal: Any = None) -> FastAPI:
             codes=codes,
             faculty_title=body.faculty_title.strip(),
             head_name=body.head_name.strip(),
+            groups=groups,
         )
         semester = "нечётный" if body.odd_semester else "чётный"
-        title = f"{report.department}: аттестация №{body.attestation}, {semester} семестр {body.year}-{body.year + 1}"
+        named = ("группа " if len(groups) == 1 else "группы ") + ", ".join(sorted(groups))
+        scope = report.department + (f", {named}" if groups else "")
+        title = f"{scope}: аттестация №{body.attestation}, {semester} семестр {body.year}-{body.year + 1}"
 
         def work(workdir: Path, log: Callable[[str], None]) -> Path:
             result = portal.build(session.portal, report, workdir, log)
+            if groups:
+                # a report on a few groups says nothing about which directions the department has
+                return result
             # Remembered only after a successful report, so a mistaken choice is not kept
             presets.save(
                 report.department,
@@ -365,6 +393,67 @@ def create_app(settings: Settings, portal: Any = None) -> FastAPI:
         if job is None or key not in job.files or not job.files[key].exists():
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Файл не найден или уже удалён.")
         path = job.files[key]
+        return FileResponse(path, filename=path.name)
+
+    @app.post(BASE + "/api/jobs/{job_id}/share", status_code=status.HTTP_201_CREATED)
+    def share_job(request: Request, job_id: str, body: ShareRequest):
+        session = require_session(request, check_csrf=True)
+        job = runner.get(job_id, session.token)
+        if job is None or job.status != "done":
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Задача не найдена или её файлы уже удалены.")
+        try:
+            token, share = shares.create(session.login, job.title, job.markdown or "", job.data, job.files, body.days)
+        except ShareRejected as error:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(error)) from None
+        logger.info("Share %s created by %s for %d days: %s", share.id[:8], session.login, body.days, job.title)
+        # the token is shown once: the server keeps only its hash
+        return {"link": f"{BASE}/share#{token}", **share.public()}
+
+    @app.get(BASE + "/api/shares")
+    def my_shares(request: Request):
+        session = require_session(request)
+        return {"lifetimes": LIFETIMES_DAYS, "shares": [share.public() for share in shares.owned_by(session.login)]}
+
+    @app.delete(BASE + "/api/shares/{share_id}", status_code=status.HTTP_204_NO_CONTENT)
+    def revoke_share(request: Request, share_id: str):
+        session = require_session(request, check_csrf=True)
+        if not shares.revoke(session.login, share_id):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Ссылка не найдена: возможно, она уже истекла.")
+        logger.info("Share %s revoked by %s", share_id[:8], session.login)
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @app.get(BASE + "/share")
+    async def shared_page():
+        return page("share.html")
+
+    def shared(request: Request) -> Share:
+        client = client_address(request)
+        if not share_limiter.allowed(client):
+            raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Слишком много неверных ссылок. Подождите 15 минут.")
+        share = shares.get(request.headers.get(SHARE_HEADER, ""))
+        if share is None:
+            share_limiter.failed(client)
+            raise HTTPException(status.HTTP_404_NOT_FOUND, SHARE_GONE)
+        return share
+
+    @app.get(BASE + "/api/shared")
+    def shared_report(request: Request):
+        share = shared(request)
+        return {
+            "title": share.title,
+            "created": share.created,
+            "expires": share.expires,
+            "markdown": share.markdown(),
+            "data": share.data(),
+            "downloads": downloads(share.sizes, lambda key: f"{BASE}/api/shared/files/{key}"),
+        }
+
+    @app.get(BASE + "/api/shared/files/{key}")
+    def shared_file(request: Request, key: str):
+        share = shared(request)
+        path = share.file(key)
+        if path is None or not path.exists():
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Файл не найден.")
         return FileResponse(path, filename=path.name)
 
     @app.exception_handler(HTTPException)

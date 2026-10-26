@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Результаты аттестации</title>
+<link rel="stylesheet" href="/attestation/static/style.css">
+<script src="/attestation/static/charts.js" defer></script>
+<script src="/attestation/static/report.js" defer></script>
+<script src="/attestation/static/share.js" defer></script>
+</head>
+<body class="shared">
+<main class="container">
+  <p class="share-banner">Результаты аттестации по ссылке · вход не нужен</p>
+  <div class="error" id="share-error" role="alert"></div>
+  <p class="hint" id="share-loading">Загружаю результаты…</p>
+
+  <section id="result" hidden>
+    <h1 id="report-title"></h1>
+    <p class="subtitle" id="report-intro"></p>
+    <p class="share-until" id="share-until"></p>
+    <div class="downloads" id="downloads"></div>
+    <div class="report-tabs" id="report-tabs"></div>
+    <div class="toolbar" id="toolbar"></div>
+    <div class="report" id="report-body"></div>
+  </section>
+
+  <div class="note"><b>О странице</b>
+    Этой страницей с вами поделился преподаватель. На ней ФИО и баллы студентов, поэтому не пересылайте ссылку дальше.
+    Когда срок ссылки закончится или преподаватель её отзовёт, страница перестанет открываться, а её данные удалятся с сервера.</div>
+
+  <footer class="stamp" aria-label="Основная надпись">
+    <div class="stamp-cell stamp-title"><small>Документ</small><span>Результаты аттестации</span><span class="stamp-org">ПГТУ · Радиотехнический факультет</span></div>
+    <div class="stamp-cell stamp-department"><small>Кафедра</small><span id="stamp-department">—</span></div>
+    <div class="stamp-cell stamp-period"><small>Аттестация</small><span id="stamp-period">—</span></div>
+    <div class="stamp-cell stamp-user"><small>Доступ</small><span>по ссылке</span></div>
+    <div class="stamp-cell stamp-date"><small>Дата</small><span id="stamp-date">—</span></div>
+    <div class="stamp-cell stamp-sheet"><small>Лист</small><span>1</span></div>
+  </footer>
+</main>
+</body>
+</html>

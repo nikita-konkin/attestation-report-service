@@ -251,6 +251,10 @@ def add_requisites(document: Document, model: rm.DepartmentModel) -> None:
 
     levels = model_levels(model)
     whose = f"студентов {rm.LEVEL_GENITIVE[levels[0]]}" if len(levels) == 1 else "студентов"
+    if model.department.groups:
+        # справка по выбранным группам называет свои группы (этого уровня образования), а не уровень
+        chosen = sorted(group.name for group in model.groups)
+        whose = ("студентов группы " if len(chosen) == 1 else "студентов групп ") + ", ".join(chosen)
     add_paragraph(
         document,
         f"О результатах аттестации № {model.attestation} {whose} в {model.semester.replace('ый', 'ом')} "
@@ -329,7 +333,7 @@ def add_groups_table(document: Document, model: rm.DepartmentModel, numbering: N
         row, status = values(f"Итого: {title}", "", groups, None)
         add_row(table, row, widths, left_columns={0}, bold=True, fills={column: STATUS_FILLS[status] for column in status_columns})
     if len(levels) > 1:
-        row, status = values("Итого по кафедре", "", model.groups, None)
+        row, status = values("Итого" if model.department.groups else "Итого по кафедре", "", model.groups, None)
         add_row(table, row, widths, left_columns={0}, bold=True, fills={column: STATUS_FILLS[status] for column in status_columns})
 
     add_note(
