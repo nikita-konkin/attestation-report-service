@@ -159,6 +159,22 @@ def test_cannot_pass_wrong_choice_to_report(tmp_path):
     )
 
 
+def test_cannot_pass_chosen_groups_to_report(tmp_path):
+    _, client, portal = make_service(tmp_path)
+    log_in(client)
+    finished(client, codes=["ИТС(о)"], groups=["ИТС(о)-11"])
+    assert portal.requests[-1].groups == frozenset({"ИТС(о)-11"}), "Report was not limited to the chosen group"
+
+
+def test_cannot_remember_choice_of_single_groups(tmp_path):
+    _, client, _ = make_service(tmp_path)
+    log_in(client)
+    finished(client, department="ВМ", codes=["ПИ(о)"], groups=["ПИ(о)-11"], faculty="1930")
+    assert client.get("/attestation/api/preset", params={"department": "ВМ"}).json() is None, (
+        "A report on a few groups was remembered as the department's directions"
+    )
+
+
 def test_cannot_start_job_without_directions(tmp_path):
     _, client, _ = make_service(tmp_path)
     log_in(client)

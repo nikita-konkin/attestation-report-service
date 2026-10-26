@@ -7,6 +7,7 @@
 <title>Отчёт по аттестации</title>
 <link rel="stylesheet" href="/attestation/static/style.css">
 <script src="/attestation/static/charts.js" defer></script>
+<script src="/attestation/static/report.js" defer></script>
 <script src="/attestation/static/app.js" defer></script>
 </head>
 <body>
@@ -28,9 +29,12 @@
       <div><label for="faculty">Факультет</label><select id="faculty" required><option value="">загрузка…</option></select></div>
     </div>
 
-    <fieldset class="directions">
+    <fieldset class="directions" id="directions-fieldset">
       <legend>Группы кафедры</legend>
-      <p class="hint" id="directions-hint">Отметьте направления своей кафедры. Выбор запомнится для кафедры, новые группы тех же направлений попадут в отчёт сами.</p>
+      <div class="scope">
+        <label><input type="radio" name="scope" value="directions" checked> Все группы отмеченных направлений — выбор запомнится для кафедры, новые группы тех же направлений попадут в отчёт сами</label>
+        <label><input type="radio" name="scope" value="groups"> Только отмеченные группы — отчёт по одной или нескольким группам, без места кафедры и раздела о её преподавателях</label>
+      </div>
       <div id="directions"></div>
     </fieldset>
 
@@ -44,15 +48,40 @@
     <div class="progress" id="progress" hidden></div>
   </form>
 
+  <section class="shares" id="shares" hidden>
+    <h2>Ваши ссылки на результаты</h2>
+    <p class="hint">Ссылка перестаёт открываться в срок или сразу после отзыва; её копия отчёта тогда удаляется с сервера.</p>
+    <div class="share-list" id="share-list"></div>
+  </section>
+
   <div class="note"><b>Как защищены данные</b>
     Вход — учётной записью РИТМ: пароль проверяет портал, сервис хранит только сеанс портала в памяти и забывает его при выходе
     или через 30 минут бездействия. Выгрузка идёт под вашей учётной записью, поэтому в отчёт попадает только то, что портал показывает вам.
-    Выгруженные данные содержат ФИО и баллы студентов, поэтому готовые файлы удаляются с сервера через 30 минут.</div>
+    Выгруженные данные содержат ФИО и баллы студентов, поэтому готовые файлы удаляются с сервера через 30 минут. Если вы поделились
+    отчётом по ссылке, его копия хранится до конца срока ссылки (не больше 7 дней) или до её отзыва.</div>
 
   <section id="result" hidden>
     <h1 id="report-title"></h1>
     <p class="subtitle" id="report-intro"></p>
     <div class="downloads" id="downloads"></div>
+    <div class="share-panel">
+      <b>Поделиться результатами</b>
+      <p class="hint">По ссылке откроется страница с этими результатами и файлами без входа в РИТМ. На ней ФИО и баллы студентов:
+        отправляйте ссылку только тем, кому эти данные положены.</p>
+      <div class="share-row">
+        <label for="share-days">Срок</label>
+        <select id="share-days"></select>
+        <button class="link-btn" id="share-create" type="button">Создать ссылку</button>
+      </div>
+      <div class="share-made" id="share-made" hidden>
+        <div class="share-row">
+          <input type="text" id="share-url" readonly aria-label="Ссылка на результаты">
+          <button class="link-btn" id="share-copy" type="button">Копировать</button>
+        </div>
+        <p class="hint" id="share-until"></p>
+      </div>
+      <div class="error" id="share-error" role="alert"></div>
+    </div>
     <div class="report-tabs" id="report-tabs"></div>
     <div class="toolbar" id="toolbar"></div>
     <div class="report" id="report-body"></div>

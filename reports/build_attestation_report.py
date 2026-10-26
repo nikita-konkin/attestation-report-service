@@ -1340,10 +1340,12 @@ def build_report(input_dir: Path, output_path: Path) -> Path:
         next_section_number += 1
 
     kafedra_path = kafedra_teachers.find_kafedra_report(input_dir)
+    info = load_department(input_dir.parent)
     # В отчёте по кафедрам только группы бакалавриата, поэтому раздел только в отчёте бакалавриата.
-    if kafedra_path is not None and degree_genitive(input_dir) == "бакалавриата":
+    # Раздел описывает кафедру целиком, поэтому в отчёте по выбранным группам его нет.
+    if kafedra_path is not None and degree_genitive(input_dir) == "бакалавриата" and not info.groups:
         kafedra_report = kafedra_teachers.parse_kafedra_report(kafedra_path)
-        department = kafedra_report.department(load_department(input_dir.parent).name)
+        department = kafedra_report.department(info.name)
         if department is not None:
             figure_number = add_teachers_section(
                 document, input_dir, kafedra_report, department, next_section_number, figure_number

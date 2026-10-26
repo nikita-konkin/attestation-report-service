@@ -155,9 +155,17 @@ def teachers_section(model: rm.DepartmentModel) -> list[str]:
     return lines
 
 
+def scope(model: rm.DepartmentModel) -> str:
+    """«Кафедра ИТРС»; для отчёта по выбранным группам — «Кафедра ИТРС, группы ИТС(о)-11, ИТС(о)-12»."""
+    if not model.department.groups:
+        return f"Кафедра {model.department.name}"
+    names = sorted(group.name for group in model.groups)
+    return f"Кафедра {model.department.name}, " + ("группа " if len(names) == 1 else "группы ") + ", ".join(names)
+
+
 def build_markdown(model: rm.DepartmentModel) -> str:
     lines = [
-        f"# Кафедра {model.department.name}: {model.title}",
+        f"# {scope(model)}: {model.title}",
         "",
         f"Данные РИТМ на {model.execution_time}. Н/А — неаттестация (балл ниже минимального). "
         f"Статус: {rm.status_label(rm.STATUS_OK)} — Н/А до {rm.WARN_THRESHOLD:.0f} %, "

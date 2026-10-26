@@ -29,6 +29,8 @@ class ReportRequest:
     codes: frozenset[str]
     faculty_title: str
     head_name: str
+    # only these groups of the chosen directions; empty — every group of them, new ones included
+    groups: frozenset[str] = frozenset()
 
 
 class RitmPortal:
@@ -98,16 +100,19 @@ class RitmPortal:
             level
             for level in ritm_fetch.LEVELS
             if ritm_fetch.department_groups(
-                ritm_fetch.list_groups(portal, period, level, request.faculty), set(request.codes)
+                ritm_fetch.list_groups(portal, period, level, request.faculty), set(request.codes), set(request.groups)
             )
         ]
         if not levels:
-            raise ritm_fetch.RitmError("В выбранных направлениях нет групп за этот период.")
+            raise ritm_fetch.RitmError(
+                "Выбранных групп нет за этот период." if request.groups else "В выбранных направлениях нет групп за этот период."
+            )
         log(period.label)
         department = DepartmentInfo(
             name=request.department,
             faculty_title=request.faculty_title,
             head_name=request.head_name or DepartmentInfo.head_name,
+            groups=tuple(sorted(request.groups)),
         )
         return make_report.build_all(
             portal, period, workdir, levels, log=log,

@@ -422,8 +422,9 @@ def build_model(attestation_dir: Path, level: str | None = None) -> DepartmentMo
         raise FileNotFoundError(f"В {attestation_dir} нет XML групп в папках {folders}.")
 
     rank = None
-    # «Процент аттестаций по кафедрам» не содержит групп магистратуры: место кафедры о ней ничего не говорит
-    if kafedra_report is not None and level != "м":
+    # «Процент аттестаций по кафедрам» не содержит групп магистратуры: место кафедры о ней ничего не говорит;
+    # отчёт по выбранным группам — не о кафедре целиком, место кафедры в нём тоже ни к чему
+    if kafedra_report is not None and level != "м" and not info.groups:
         department = kafedra_report.department(info.name)
         place = kafedra_report.rank_of(info.name)
         if department is not None and place is not None:

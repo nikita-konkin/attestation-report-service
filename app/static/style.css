@@ -52,9 +52,19 @@ input::placeholder { color: #8ea2ba; }
 .directions { border: 1.5px dashed var(--line); border-radius: 0; padding: 12px 16px 6px; margin-bottom: 18px; }
 .directions legend { font: 700 12px var(--font-draw); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 0 6px; }
 .directions h4 { font: 700 12px var(--font-draw); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 8px 0 6px; }
-.direction { display: flex; gap: 8px; align-items: baseline; font-weight: 400; margin: 0 0 8px; font-size: 14px; text-transform: none; letter-spacing: 0; color: var(--text); }
-.direction small { color: var(--muted); }
+.direction { margin: 0 0 12px; }
+.direction-head { display: flex; gap: 8px; align-items: baseline; font-weight: 400; margin: 0 0 4px; font-size: 14px; text-transform: none; letter-spacing: 0; color: var(--text); }
 .direction-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0 16px; }
+.scope { display: grid; gap: 4px; margin: 0 0 12px; }
+.scope label { display: flex; gap: 8px; align-items: baseline; margin: 0; font: 14px/1.45 var(--font-text); letter-spacing: 0; text-transform: none; color: var(--text); cursor: pointer; }
+/* по направлениям группы — только перечень; в отчёте по группам у каждой своя отметка */
+.group-list { display: flex; flex-wrap: wrap; gap: 4px; padding-left: 22px; }
+.group-chip { display: inline-flex; gap: 5px; align-items: center; margin: 0; padding: 0 6px 0 0; font: 13px var(--font-draw); letter-spacing: .02em; text-transform: none; color: var(--muted); pointer-events: none; }
+.group-chip input { display: none; }
+.by-groups .group-chip { padding: 2px 8px 2px 5px; border: 1px solid var(--line); background: #fff; color: var(--text); pointer-events: auto; cursor: pointer; }
+.by-groups .group-chip input { display: inline-block; }
+.by-groups .group-chip:has(input:checked) { border-color: var(--sheet); background: #eef3f9; }
+.by-groups .group-chip:has(input:not(:checked)) span { color: var(--muted); text-decoration: line-through; }
 
 .note { border: 1.5px solid var(--line); border-left: 6px solid var(--sheet); padding: 14px 18px; margin: 24px 0; font-size: 13px; line-height: 1.6; color: var(--muted); background: repeating-linear-gradient(-45deg, transparent 0 9px, rgba(23, 58, 99, .045) 9px 10px); }
 .note b { display: block; margin-bottom: 4px; font: 700 13px var(--font-draw); letter-spacing: .08em; text-transform: uppercase; color: var(--sheet); }
@@ -72,6 +82,26 @@ input::placeholder { color: #8ea2ba; }
 .download-file.main { background: var(--sheet); color: #fff; }
 .download-file.main span { color: #c9d7e8; }
 .download-file:hover { box-shadow: 3px 3px 0 rgba(23, 58, 99, .2); }
+
+/* выдача ссылки — как отдельная графа листа: штриховая рамка, срок и сама ссылка */
+.share-panel { border: 1.5px dashed var(--line); padding: 12px 16px; margin: 0 0 24px; }
+.share-panel > b { display: block; font: 700 13px var(--font-draw); letter-spacing: .08em; text-transform: uppercase; color: var(--sheet); }
+.share-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 6px 0; }
+.share-row label { margin: 0; }
+.share-row select { width: auto; min-width: 120px; padding: 7px 8px; }
+.share-row input[type=text] { flex: 1 1 320px; width: auto; font: 13px var(--font-mono); }
+.share-made .hint { margin-bottom: 0; }
+.shares { margin: 24px 0 0; }
+h2 { font: 700 17px var(--font-draw); letter-spacing: .06em; text-transform: uppercase; color: var(--sheet); margin-bottom: 4px; }
+.share-list { border-top: 1.5px solid var(--sheet); }
+.share-item { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.share-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.share-title { font: 700 15px var(--font-draw); letter-spacing: .02em; color: var(--text); overflow-wrap: anywhere; }
+.share-text small { color: var(--muted); font-size: 12px; }
+/* страница по ссылке: лист без формы, результат сразу с начала */
+.share-banner { display: inline-block; margin-bottom: 16px; padding: 4px 10px; border: 1.5px solid var(--sheet); font: 700 12px var(--font-draw); letter-spacing: .1em; text-transform: uppercase; color: var(--sheet); }
+.shared #result { margin-top: 0; border-top: none; padding-top: 0; }
+.share-until { color: var(--muted); font: 14px var(--font-draw); letter-spacing: .02em; margin: -14px 0 8px; }
 
 .report-tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 2px solid var(--sheet); margin-bottom: 18px; }
 .report-tabs button { padding: 9px 16px; border: 1.5px solid transparent; border-bottom: none; background: none; font: 700 14px var(--font-draw); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); cursor: pointer; }

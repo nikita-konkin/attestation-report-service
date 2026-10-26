@@ -106,3 +106,56 @@ def test_cannot_fail_report_when_libreoffice_is_missing(tmp_path, monkeypatch):
     _, job = finished_job(tmp_path, build=pdf_reports)
     formats = {file["format"] for item in job["downloads"] for file in item["files"]}
     assert formats == {"DOCX", "Markdown"}, f"Without LibreOffice the reports must stay in DOCX: {formats}"
+
+
+def offline_group_reports(request, workdir, log):
+    attestation_dir = synthetic.write_attestation(workdir)
+    # what fetch_level leaves behind for chosen groups: only their exports
+    for path in attestation_dir.glob("[бм]/*.xml"):
+        if path.stem not in request.groups:
+            path.unlink()
+    levels = [level for level in ("б", "м") if any((attestation_dir / level).glob("*.xml"))]
+    department = DepartmentInfo(request.department, request.faculty_title, "И. О. Фамилия", tuple(sorted(request.groups)))
+    period = ritm_fetch.AttestationPeriod(2026, True, 1)
+    return make_report.build_all(None, period, workdir, levels, log=log, department=department, pdf=False)
+
+
+def group_job(tmp_path, groups=("ИТС(о)-11",)):
+    return finished_job(tmp_path, build=offline_group_reports, codes=["ИТС(о)"], groups=list(groups))
+
+
+def detailed_report_text(client, job) -> str:
+    detailed = download(job, "Подробный отчёт: бакалавриат")
+    document = docx.Document(io.BytesIO(client.get(detailed["href"]).content))
+    return "\n".join(paragraph.text for paragraph in document.paragraphs)
+
+
+def test_cannot_title_group_report_as_whole_department(tmp_path):
+    _, job = group_job(tmp_path)
+    assert job["markdown"].startswith("# Кафедра ИТРС, группа ИТС(о)-11:"), (
+        f"Report on one group is titled as the whole department: {job['markdown'].splitlines()[0]}"
+    )
+
+
+def test_cannot_show_department_rank_in_group_report(tmp_path):
+    _, job = group_job(tmp_path)
+    assert "место кафедры" not in job["markdown"], "Report on chosen groups shows the department's rank"
+
+
+def test_cannot_keep_department_section_in_group_report(tmp_path):
+    client, job = group_job(tmp_path)
+    assert "Место кафедры среди кафедр вуза" not in detailed_report_text(client, job), (
+        "Detailed report on chosen groups describes the whole department"
+    )
+
+
+def test_cannot_name_level_instead_of_groups_in_short_report(tmp_path):
+    client, job = group_job(tmp_path)
+    assert "студентов группы ИТС(о)-11" in short_report_text(client, job), (
+        "Short report on a chosen group does not name the group"
+    )
+
+
+def test_cannot_put_unchosen_group_in_report(tmp_path):
+    _, job = group_job(tmp_path)
+    assert "ИСТ(о)-21" not in job["markdown"], "A group that was not chosen got into the report"
