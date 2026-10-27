@@ -98,6 +98,7 @@ h2 { font: 700 17px var(--font-draw); letter-spacing: .06em; text-transform: upp
 .share-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .share-title { font: 700 15px var(--font-draw); letter-spacing: .02em; color: var(--text); overflow-wrap: anywhere; }
 .share-text small { color: var(--muted); font-size: 12px; }
+.share-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 /* страница по ссылке: лист без формы, результат сразу с начала */
 .share-banner { display: inline-block; margin-bottom: 16px; padding: 4px 10px; border: 1.5px solid var(--sheet); font: 700 12px var(--font-draw); letter-spacing: .1em; text-transform: uppercase; color: var(--sheet); }
 .shared #result { margin-top: 0; border-top: none; padding-top: 0; }

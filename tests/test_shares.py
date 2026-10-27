@@ -1,6 +1,7 @@
 """Links to report results that open without a login."""
 
 import time
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 from helpers import RITM_PASSWORD, csrf, finished, log_in, make_service
@@ -10,7 +11,7 @@ from app.logging_config import configure_logging
 from app.shares import ShareStore
 
 
-def shared_job(tmp_path, days: int = 3, **overrides):
+def shared_job(tmp_path, days: int | None = 3, **overrides):
     app, client, portal = make_service(tmp_path, **overrides)
     log_in(client)
     job = finished(client)
@@ -199,3 +200,73 @@ def test_cannot_keep_half_written_share(tmp_path):
     draft.mkdir(parents=True)
     store.cleanup()
     assert not draft.exists(), "A draft left by a crash was not removed"
+
+
+def later_than_a_week(monkeypatch):
+    """A year on for the share store only: the test client's cookie must not expire with it."""
+    later = time.time() + 365 * 24 * 3600
+    monkeypatch.setattr(shares_module, "time", SimpleNamespace(time=lambda: later))
+
+
+def test_cannot_expire_permanent_link(tmp_path, monkeypatch):
+    app, _, _, response = shared_job(tmp_path, days=None)
+    later_than_a_week(monkeypatch)
+    assert open_share(app, token_of(response)).status_code == 200, "A permanent link expired"
+
+
+def test_cannot_delete_permanent_link_on_cleanup(tmp_path, monkeypatch):
+    app, _, _, response = shared_job(tmp_path, days=None)
+    later_than_a_week(monkeypatch)
+    app.state.shares.cleanup()
+    assert (tmp_path / "data" / "shares" / response.json()["id"]).exists(), "Cleanup deleted a permanent link"
+
+
+def test_cannot_keep_expiry_after_making_link_permanent(tmp_path, monkeypatch):
+    app, client, _, response = shared_job(tmp_path, days=1)
+    client.post(f"/attestation/api/shares/{response.json()['id']}/permanent", headers=csrf(client))
+    later_than_a_week(monkeypatch)
+    assert open_share(app, token_of(response)).status_code == 200, "A link made permanent still expired"
+
+
+def test_cannot_show_expiry_of_permanent_link_in_list(tmp_path):
+    _, client, _, response = shared_job(tmp_path, days=3)
+    client.post(f"/attestation/api/shares/{response.json()['id']}/permanent", headers=csrf(client))
+    assert client.get("/attestation/api/shares").json()["shares"][0]["expires"] is None, (
+        "The owner's list still shows an expiry for a permanent link"
+    )
+
+
+def test_cannot_make_link_permanent_without_csrf_token(tmp_path):
+    _, client, _, response = shared_job(tmp_path, days=1)
+    answer = client.post(f"/attestation/api/shares/{response.json()['id']}/permanent")
+    assert answer.status_code == 403, "A link was made permanent without the CSRF token"
+
+
+def test_cannot_make_link_of_another_teacher_permanent(tmp_path):
+    app, _, _, response = shared_job(tmp_path, days=1)
+    other = visitor(app)
+    other.post("/attestation/login", data={"username": "marstu.net\\other", "password": RITM_PASSWORD})
+    other.post(f"/attestation/api/shares/{response.json()['id']}/permanent", headers=csrf(other))
+    assert app.state.shares.get(token_of(response)).expires is not None, (
+        "Another teacher made someone else's link permanent"
+    )
+
+
+def test_cannot_revive_expired_link(tmp_path, monkeypatch):
+    app, client, _, response = shared_job(tmp_path, days=1)
+    later_than_a_week(monkeypatch)
+    answer = client.post(f"/attestation/api/shares/{response.json()['id']}/permanent", headers=csrf(client))
+    assert answer.status_code == 404, "An expired link was brought back as permanent"
+
+
+def test_cannot_keep_permanent_link_after_revoke(tmp_path):
+    app, client, _, response = shared_job(tmp_path, days=None)
+    client.delete(f"/attestation/api/shares/{response.json()['id']}", headers=csrf(client))
+    assert open_share(app, token_of(response)).status_code == 404, "A permanent link still opened after revoke"
+
+
+def test_cannot_offer_permanent_lifetime_wrongly(tmp_path):
+    _, client, _, _ = shared_job(tmp_path)
+    assert client.get("/attestation/api/shares").json()["lifetimes"] == [1, 3, 7, None], (
+        "The page is not offered 1, 3, 7 days and a permanent link"
+    )
