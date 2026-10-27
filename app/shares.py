@@ -3,10 +3,14 @@
 A teacher shares a finished report: /attestation/share#<token> shows the same sections, charts and
 files without a RITM login until the link expires (1, 3 or 7 days) or its owner revokes it. A link
 can also be permanent, from the start or later from the owner's list; it then lasts until revoked.
+The owner's list shows each link again, opens its report on the service page and can issue a new
+link for the same report when the old one must stop working.
 
 - the token is 256 random bits and travels after «#»: browsers never send that part of the address,
   so it reaches neither the nginx logs nor a Referer header; the page passes it in X-Share-Token;
-- the disk keeps only the token's SHA-256 (the folder name), so the stored files do not give the link away;
+- the folder is named by the token's SHA-256; the token itself sits in share.json next to the report
+  copy, so the owner can see the link again. Whoever can read that folder can read the report anyway;
+  links made before the token was kept have none and can only be reissued;
 - a snapshot of the report is kept in the data volume, so links survive restarts and updates; it
   holds student names and scores and is deleted as soon as the link expires or is revoked.
 """
@@ -50,6 +54,7 @@ class Share:
     title: str
     created: float  # Unix time, not monotonic: shares outlive restarts
     expires: Optional[float]  # None for a permanent link
+    token: Optional[str]  # None for links made before tokens were kept
     files: dict[str, str]  # key -> file name in FILES_DIR
     sizes: dict[str, int]
 
@@ -68,7 +73,7 @@ class Share:
         return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
 
     def public(self) -> dict:
-        """What the owner sees in the list of their links; never the token."""
+        """Title and lifetime; the token goes only to the owner, see main.py."""
         return {"id": self.id, "title": self.title, "created": self.created, "expires": self.expires}
 
 
@@ -104,6 +109,7 @@ class ShareStore:
                 title=title,
                 created=time.time(),
                 expires=None if days is None else time.time() + days * 24 * 3600,
+                token=token,
                 files={key: path.name for key, path in files.items()},
                 sizes={key: path.stat().st_size for key, path in files.items()},
             )
@@ -132,6 +138,7 @@ class ShareStore:
                 title=meta["title"],
                 created=float(meta["created"]),
                 expires=None if meta["expires"] is None else float(meta["expires"]),
+                token=meta.get("token"),
                 files=dict(meta["files"]),
                 sizes={key: int(size) for key, size in meta["sizes"].items()},
             )
@@ -162,13 +169,33 @@ class ShareStore:
         shares = [share for share in self._shares() if share.owner == owner and not share.expired(now)]
         return sorted(shares, key=lambda share: share.created, reverse=True)
 
-    def make_permanent(self, owner: str, ident: str) -> Optional[Share]:
-        """Drop the expiry of the owner's live link; None when there is no such link."""
+    def owned(self, owner: str, ident: str) -> Optional[Share]:
+        """The owner's live link by its id; None for someone else's, an expired or an unknown one."""
         if not ID_PATTERN.match(ident or ""):
             return None
+        share = self._load(self.root / ident)
+        if share is None or share.owner != owner or share.expired():
+            return None
+        return share
+
+    def reissue(self, owner: str, ident: str) -> Optional[tuple[str, Share]]:
+        """A new token for the same report and lifetime: the old link stops opening at once."""
         with self._lock:
-            share = self._load(self.root / ident)
-            if share is None or share.owner != owner or share.expired():
+            share = self.owned(owner, ident)
+            if share is None:
+                return None
+            token = secrets.token_urlsafe(32)
+            folder = self.root / share_id(token)
+            share.folder.rename(folder)
+            share = replace(share, id=folder.name, folder=folder, token=token)
+            self._write_meta(folder, share)
+        return token, share
+
+    def make_permanent(self, owner: str, ident: str) -> Optional[Share]:
+        """Drop the expiry of the owner's live link; None when there is no such link."""
+        with self._lock:
+            share = self.owned(owner, ident)
+            if share is None:
                 return None
             share = replace(share, expires=None)
             self._write_meta(share.folder, share)
@@ -176,7 +203,7 @@ class ShareStore:
 
     @staticmethod
     def _write_meta(folder: Path, share: Share) -> None:
-        meta = {key: getattr(share, key) for key in ("owner", "title", "created", "expires", "files", "sizes")}
+        meta = {key: getattr(share, key) for key in ("owner", "title", "created", "expires", "token", "files", "sizes")}
         draft = folder / (META_FILE + ".new")
         draft.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
         draft.replace(folder / META_FILE)  # atomic: a reader sees the old expiry or the new one

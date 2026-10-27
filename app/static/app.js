@@ -10,6 +10,9 @@ let faculties = [];
 let currentJob = null;  // готовая задача, которой можно поделиться ссылкой
 const PERMANENT_WARNING = "Ссылка станет постоянной: страница с ФИО и баллами студентов будет открываться " +
   "у всех, у кого она есть, пока вы её не отзовёте. Сделать постоянной?";
+const REISSUE_WARNING = "У отчёта будет новая ссылка, а прежняя сразу перестанет открываться — " +
+  "у всех, кому вы её отправили. Выдать новую?";
+const NO_LINK = "Адрес этой ссылки не сохранился: она создана до обновления сервиса. Её можно заменить новой.";
 
 function fillYears(current) {
   const select = document.getElementById("year");
@@ -241,6 +244,8 @@ async function requestReport(event) {
   button.textContent = "Формирую отчёт, это займёт несколько минут…";
   $("result").hidden = true;
   currentJob = null;
+  $("result-share").hidden = true;
+  $("share-panel").hidden = false;
   $("share-made").hidden = true;
   $("share-error").textContent = "";
   try {
@@ -261,17 +266,72 @@ function daysLabel(days) {
   return `${days} ${word}`;
 }
 
-function renderShares(shares) {
+function absoluteLink(link) {
+  return new URL(link, window.location.origin).href;
+}
+
+function actionButton(text, action) {
+  const item = el("button", "link-btn", text);
+  item.type = "button";
+  item.addEventListener("click", action);
+  return item;
+}
+
+// строка с адресом под ссылкой из списка: тот же вид, что у только что созданной
+function linkRow(share) {
+  const row = el("div", "share-row share-address");
+  if (!share.link) {
+    row.appendChild(el("p", "hint", NO_LINK));
+    return row;
+  }
+  row.hidden = true;
+  const input = el("input");
+  input.type = "text";
+  input.readOnly = true;
+  input.value = absoluteLink(share.link);
+  input.setAttribute("aria-label", `Ссылка: ${share.title}`);
+  const copy = actionButton("Копировать", () => copyLink(input, copy, $("shares-error")));
+  row.append(input, copy);
+  return row;
+}
+
+// отчёт по ссылке — на этой же странице, как только что сформированный, но без выдачи новой ссылки
+async function openShare(share) {
+  const report = await api(`/api/shares/${encodeURIComponent(share.id)}/report`);
+  currentJob = null;
+  $("share-panel").hidden = true;
+  $("result-share").textContent = `Копия отчёта по вашей ссылке: ${lifetimeText(report.expires)}.`;
+  $("result-share").hidden = false;
+  $("progress").hidden = true;
+  showReport(report.markdown, report.downloads, report.data);
+}
+
+function renderShares(shares, shown) {
   $("shares").hidden = !shares.length;
   $("share-list").replaceChildren(...shares.map(share => {
     const row = el("div", "share-item");
     const text = el("div", "share-text");
     text.append(el("span", "share-title", share.title), el("small", "", lifetimeText(share.expires)));
     const actions = el("div", "share-actions");
+    const address = linkRow(share);
+    const show = actionButton("Показать ссылку", () => {
+      address.hidden = !address.hidden;
+      show.textContent = address.hidden ? "Показать ссылку" : "Скрыть ссылку";
+      const input = address.querySelector("input");
+      if (input && !address.hidden) input.select();
+    });
+    const open = actionButton("Открыть", guarded(() => openShare(share)));
+    actions.appendChild(open);
+    if (share.link) actions.appendChild(show);
+    const reissue = actionButton("Новая ссылка", guarded(async () => {
+      if (!window.confirm(REISSUE_WARNING)) return;
+      reissue.disabled = true;
+      const fresh = await api(`/api/shares/${encodeURIComponent(share.id)}/reissue`, { method: "POST" });
+      await loadShares(fresh.id);  // новый адрес сразу раскрыт
+    }));
+    actions.appendChild(reissue);
     if (share.expires !== null) {
-      const keep = el("button", "link-btn", "Сделать постоянной");
-      keep.type = "button";
-      keep.addEventListener("click", guarded(async () => {
+      const keep = actionButton("Сделать постоянной", guarded(async () => {
         if (!window.confirm(PERMANENT_WARNING)) return;
         keep.disabled = true;
         await api(`/api/shares/${encodeURIComponent(share.id)}/permanent`, { method: "POST" });
@@ -279,24 +339,24 @@ function renderShares(shares) {
       }));
       actions.appendChild(keep);
     }
-    const revoke = el("button", "link-btn", "Отозвать");
-    revoke.type = "button";
-    revoke.addEventListener("click", guarded(async () => {
+    const revoke = actionButton("Отозвать", guarded(async () => {
       revoke.disabled = true;
       await api(`/api/shares/${encodeURIComponent(share.id)}`, { method: "DELETE" });
       await loadShares();
     }));
     actions.appendChild(revoke);
-    row.append(text, actions);
+    row.append(text, actions, address);
+    if (share.id === shown) show.click();
     return row;
   }));
 }
 
-async function loadShares() {
+// shown: id ссылки, адрес которой показать сразу (только что выданной заново)
+async function loadShares(shown = "") {
   const { lifetimes, shares } = await api("/api/shares");
   const select = $("share-days");
   if (!select.options.length) lifetimes.forEach(days => select.add(new Option(daysLabel(days), days === null ? "" : days)));
-  renderShares(shares);
+  renderShares(shares, shown);
 }
 
 async function createShare() {
@@ -309,9 +369,8 @@ async function createShare() {
       method: "POST",
       body: JSON.stringify({ days: $("share-days").value === "" ? null : Number($("share-days").value) }),
     });
-    $("share-url").value = new URL(share.link, window.location.origin).href;
-    const lifetime = lifetimeText(share.expires);
-    $("share-until").textContent = `Ссылка ${lifetime}. Она показывается только сейчас — сохраните её.`;
+    $("share-url").value = absoluteLink(share.link);
+    $("share-until").textContent = `Ссылка ${lifetimeText(share.expires)}. Её адрес есть и в списке «Ваши ссылки на результаты».`;
     $("share-copy").textContent = "Копировать";
     $("share-made").hidden = false;
     $("share-url").select();
@@ -323,13 +382,14 @@ async function createShare() {
   }
 }
 
-async function copyShare() {
-  $("share-url").select();
+async function copyLink(input, copy, error) {
+  input.select();
+  error.textContent = "";
   try {
-    await navigator.clipboard.writeText($("share-url").value);
-    $("share-copy").textContent = "Скопировано";
+    await navigator.clipboard.writeText(input.value);
+    copy.textContent = "Скопировано";
   } catch (exc) {
-    $("share-error").textContent = "Браузер не дал скопировать: ссылка выделена, скопируйте её сами (Ctrl+C).";
+    error.textContent = "Браузер не дал скопировать: ссылка выделена, скопируйте её сами (Ctrl+C).";
   }
 }
 
@@ -368,7 +428,7 @@ async function start() {
   $("report-form").addEventListener("submit", requestReport);
   document.querySelectorAll('input[name="scope"]').forEach(radio => radio.addEventListener("change", showScope));
   $("share-create").addEventListener("click", createShare);
-  $("share-copy").addEventListener("click", copyShare);
+  $("share-copy").addEventListener("click", () => copyLink($("share-url"), $("share-copy"), $("share-error")));
   ["year", "semester", "att", "department"].forEach(id => $(id).addEventListener("change", updateStamp));
   loadShares().catch(showError);
   await loadPeriodLists();

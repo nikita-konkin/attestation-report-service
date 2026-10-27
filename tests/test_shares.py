@@ -1,5 +1,6 @@
 """Links to report results that open without a login."""
 
+import json
 import time
 from types import SimpleNamespace
 
@@ -105,11 +106,10 @@ def test_cannot_lose_link_from_owner_list(tmp_path):
     assert ids == [response.json()["id"]], "The owner's new link is missing from their list"
 
 
-def test_cannot_show_token_in_owner_list(tmp_path):
-    _, client, _, response = shared_job(tmp_path)
-    assert token_of(response) not in client.get("/attestation/api/shares").text, (
-        "The list of links gives the tokens away"
-    )
+def test_cannot_lose_link_address_from_owner_list(tmp_path):
+    app, client, _, response = shared_job(tmp_path)
+    link = client.get("/attestation/api/shares").json()["shares"][0]["link"]
+    assert open_share(app, link.split("#", 1)[1]).status_code == 200, "The owner's list does not give the link again"
 
 
 def test_cannot_share_without_csrf_token(tmp_path):
@@ -135,14 +135,10 @@ def test_cannot_share_for_longer_than_a_week(tmp_path):
     assert response.status_code == 400, "Link was created for longer than 7 days"
 
 
-def test_cannot_keep_token_on_disk(tmp_path):
+def test_cannot_name_share_folder_by_token(tmp_path):
     _, _, _, response = shared_job(tmp_path)
-    stored = [path for path in (tmp_path / "data" / "shares").rglob("*")]
-    names = " ".join(str(path) for path in stored)
-    contents = b"".join(path.read_bytes() for path in stored if path.is_file())
-    assert token_of(response) not in names and token_of(response).encode() not in contents, (
-        "The token is stored on disk, so the files give the link away"
-    )
+    names = " ".join(str(path) for path in (tmp_path / "data" / "shares").rglob("*"))
+    assert token_of(response) not in names, "A file name gives the link away"
 
 
 def test_cannot_write_token_to_logs(tmp_path):
@@ -270,3 +266,100 @@ def test_cannot_offer_permanent_lifetime_wrongly(tmp_path):
     assert client.get("/attestation/api/shares").json()["lifetimes"] == [1, 3, 7, None], (
         "The page is not offered 1, 3, 7 days and a permanent link"
     )
+
+
+def other_teacher(app) -> TestClient:
+    other = visitor(app)
+    other.post("/attestation/login", data={"username": "marstu.net\\other", "password": RITM_PASSWORD})
+    return other
+
+
+def test_cannot_open_own_shared_report_on_service_page(tmp_path):
+    _, client, job, response = shared_job(tmp_path)
+    report = client.get(f"/attestation/api/shares/{response.json()['id']}/report").json()
+    assert report["markdown"] == job["markdown"], "The owner cannot open the report of their link again"
+
+
+def test_cannot_download_own_shared_file_on_service_page(tmp_path):
+    _, client, _, response = shared_job(tmp_path, files_ttl=-1)
+    report = client.get(f"/attestation/api/shares/{response.json()['id']}/report").json()
+    assert client.get(report["downloads"][0]["files"][0]["href"]).content == b"docx", (
+        "The owner cannot download the files of their link"
+    )
+
+
+def test_cannot_open_shared_report_of_another_teacher_by_id(tmp_path):
+    app, _, _, response = shared_job(tmp_path)
+    answer = other_teacher(app).get(f"/attestation/api/shares/{response.json()['id']}/report")
+    assert answer.status_code == 404, "Another teacher opened someone else's shared report by its id"
+
+
+def test_cannot_download_shared_file_of_another_teacher_by_id(tmp_path):
+    app, client, _, response = shared_job(tmp_path)
+    href = client.get(f"/attestation/api/shares/{response.json()['id']}/report").json()["downloads"][0]["files"][0]["href"]
+    assert other_teacher(app).get(href).status_code == 404, "Another teacher downloaded someone else's shared file"
+
+
+def test_cannot_open_shared_report_by_id_without_login(tmp_path):
+    app, _, _, response = shared_job(tmp_path)
+    answer = visitor(app).get(f"/attestation/api/shares/{response.json()['id']}/report")
+    assert answer.status_code == 401, "A shared report opened by its id without a login"
+
+
+def reissue(client, response):
+    return client.post(f"/attestation/api/shares/{response.json()['id']}/reissue", headers=csrf(client))
+
+
+def test_cannot_open_old_link_after_reissue(tmp_path):
+    app, client, _, response = shared_job(tmp_path)
+    reissue(client, response)
+    assert open_share(app, token_of(response)).status_code == 404, "The old link still opens after a new one was issued"
+
+
+def test_cannot_open_new_link_after_reissue(tmp_path):
+    app, client, _, response = shared_job(tmp_path)
+    fresh = reissue(client, response)
+    assert open_share(app, token_of(fresh)).status_code == 200, "The reissued link does not open"
+
+
+def test_cannot_change_lifetime_on_reissue(tmp_path):
+    _, client, _, response = shared_job(tmp_path, days=3)
+    assert reissue(client, response).json()["expires"] == response.json()["expires"], (
+        "Reissuing changed how long the link opens"
+    )
+
+
+def test_cannot_reissue_link_of_another_teacher(tmp_path):
+    app, _, _, response = shared_job(tmp_path)
+    other = other_teacher(app)
+    other.post(f"/attestation/api/shares/{response.json()['id']}/reissue", headers=csrf(other))
+    assert open_share(app, token_of(response)).status_code == 200, "Another teacher replaced someone else's link"
+
+
+def test_cannot_reissue_link_without_csrf_token(tmp_path):
+    _, client, _, response = shared_job(tmp_path)
+    answer = client.post(f"/attestation/api/shares/{response.json()['id']}/reissue")
+    assert answer.status_code == 403, "A link was replaced without the CSRF token"
+
+
+def forget_token(tmp_path, response) -> None:
+    """A link made before tokens were kept in share.json."""
+    meta = tmp_path / "data" / "shares" / response.json()["id"] / shares_module.META_FILE
+    data = json.loads(meta.read_text(encoding="utf-8"))
+    del data["token"]
+    meta.write_text(json.dumps(data), encoding="utf-8")
+
+
+def test_cannot_break_old_link_without_kept_token(tmp_path):
+    app, client, _, response = shared_job(tmp_path)
+    forget_token(tmp_path, response)
+    assert client.get("/attestation/api/shares").json()["shares"][0]["link"] is None and (
+        open_share(app, token_of(response)).status_code == 200
+    ), "A link made before tokens were kept broke or got a wrong address"
+
+
+def test_cannot_reissue_old_link_without_kept_token(tmp_path):
+    app, client, _, response = shared_job(tmp_path)
+    forget_token(tmp_path, response)
+    link = reissue(client, response).json()["link"]
+    assert open_share(app, link.split("#", 1)[1]).status_code == 200, "An old link without an address was not reissued"

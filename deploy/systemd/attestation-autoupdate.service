@@ -1,0 +1,12 @@
+# Автообновление «Отчёта по аттестации» с main; ставит deploy/install-autoupdate.sh.
+[Unit]
+Description=Attestation report: deploy new commits of main
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash @REPO@/deploy/autoupdate.sh
+# сборка образа с тестами — несколько минут, с нуля (новый базовый образ) — до получаса
+TimeoutStartSec=45min
+Nice=10
