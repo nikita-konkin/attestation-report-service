@@ -6,7 +6,7 @@ page the teacher picks the period, faculty, department and its directions of gro
 some groups of them), and the service builds the reports from the portal's data.
 
 A finished report can be shared: /attestation/share#<token> shows it without a login until the
-link expires or is revoked; a link can be permanent (see shares.py).
+link expires or is revoked; a link can be permanent, and its owner sees it again in their list (see shares.py).
 """
 
 from __future__ import annotations
@@ -407,13 +407,40 @@ def create_app(settings: Settings, portal: Any = None) -> FastAPI:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(error)) from None
         lifetime = "permanently" if body.days is None else f"for {body.days} days"
         logger.info("Share %s created by %s %s: %s", share.id[:8], session.login, lifetime, job.title)
-        # the token is shown once: the server keeps only its hash
-        return {"link": f"{BASE}/share#{token}", **share.public()}
+        return owned_view(share)
+
+    def owned_view(share: Share) -> dict:
+        """A link as its owner sees it: with the address, which nobody else is given."""
+        return {"link": f"{BASE}/share#{share.token}" if share.token else None, **share.public()}
+
+    def owned_share(request: Request, share_id: str) -> Share:
+        share = shares.owned(require_session(request).login, share_id)
+        if share is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Ссылка не найдена: возможно, она уже истекла.")
+        return share
 
     @app.get(BASE + "/api/shares")
     def my_shares(request: Request):
         session = require_session(request)
-        return {"lifetimes": LIFETIMES_DAYS, "shares": [share.public() for share in shares.owned_by(session.login)]}
+        return {"lifetimes": LIFETIMES_DAYS, "shares": [owned_view(share) for share in shares.owned_by(session.login)]}
+
+    @app.get(BASE + "/api/shares/{share_id}/report")
+    def my_shared_report(request: Request, share_id: str):
+        return shared_payload(owned_share(request, share_id), lambda key: f"{BASE}/api/shares/{share_id}/files/{key}")
+
+    @app.get(BASE + "/api/shares/{share_id}/files/{key}")
+    def my_shared_file(request: Request, share_id: str, key: str):
+        return shared_file_response(owned_share(request, share_id), key)
+
+    @app.post(BASE + "/api/shares/{share_id}/reissue")
+    def reissue_share(request: Request, share_id: str):
+        session = require_session(request, check_csrf=True)
+        reissued = shares.reissue(session.login, share_id)
+        if reissued is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Ссылка не найдена: возможно, она уже истекла.")
+        _, share = reissued
+        logger.info("Share %s reissued as %s by %s", share_id[:8], share.id[:8], session.login)
+        return owned_view(share)
 
     @app.post(BASE + "/api/shares/{share_id}/permanent")
     def make_share_permanent(request: Request, share_id: str):
@@ -422,7 +449,7 @@ def create_app(settings: Settings, portal: Any = None) -> FastAPI:
         if share is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Ссылка не найдена: возможно, она уже истекла.")
         logger.info("Share %s made permanent by %s", share_id[:8], session.login)
-        return share.public()
+        return owned_view(share)
 
     @app.delete(BASE + "/api/shares/{share_id}", status_code=status.HTTP_204_NO_CONTENT)
     def revoke_share(request: Request, share_id: str):
@@ -446,25 +473,29 @@ def create_app(settings: Settings, portal: Any = None) -> FastAPI:
             raise HTTPException(status.HTTP_404_NOT_FOUND, SHARE_GONE)
         return share
 
-    @app.get(BASE + "/api/shared")
-    def shared_report(request: Request):
-        share = shared(request)
+    def shared_payload(share: Share, href: Callable[[str], str]) -> dict:
         return {
             "title": share.title,
             "created": share.created,
             "expires": share.expires,
             "markdown": share.markdown(),
             "data": share.data(),
-            "downloads": downloads(share.sizes, lambda key: f"{BASE}/api/shared/files/{key}"),
+            "downloads": downloads(share.sizes, href),
         }
 
-    @app.get(BASE + "/api/shared/files/{key}")
-    def shared_file(request: Request, key: str):
-        share = shared(request)
+    def shared_file_response(share: Share, key: str) -> FileResponse:
         path = share.file(key)
         if path is None or not path.exists():
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Файл не найден.")
         return FileResponse(path, filename=path.name)
+
+    @app.get(BASE + "/api/shared")
+    def shared_report(request: Request):
+        return shared_payload(shared(request), lambda key: f"{BASE}/api/shared/files/{key}")
+
+    @app.get(BASE + "/api/shared/files/{key}")
+    def shared_file(request: Request, key: str):
+        return shared_file_response(shared(request), key)
 
     @app.exception_handler(HTTPException)
     async def json_error(request: Request, error: HTTPException):

@@ -51,8 +51,10 @@
   <section class="shares" id="shares" hidden>
     <h2>Ваши ссылки на результаты</h2>
     <p class="hint">Ссылка перестаёт открываться в срок или сразу после отзыва; её копия отчёта тогда удаляется с сервера.
-      Постоянная ссылка открывается, пока вы её не отзовёте; срочную можно сделать постоянной, пока она не истекла.</p>
+      Постоянная ссылка открывается, пока вы её не отзовёте; срочную можно сделать постоянной, пока она не истекла.
+      «Новая ссылка» выдаёт другой адрес на тот же отчёт, а прежний сразу перестаёт открываться.</p>
     <div class="share-list" id="share-list"></div>
+    <div class="error" id="shares-error" role="alert"></div>
   </section>
 
   <div class="note"><b>Как защищены данные</b>
@@ -63,9 +65,10 @@
 
   <section id="result" hidden>
     <h1 id="report-title"></h1>
+    <p class="share-until" id="result-share" hidden></p>
     <p class="subtitle" id="report-intro"></p>
     <div class="downloads" id="downloads"></div>
-    <div class="share-panel">
+    <div class="share-panel" id="share-panel">
       <b>Поделиться результатами</b>
       <p class="hint">По ссылке откроется страница с этими результатами и файлами без входа в РИТМ. На ней ФИО и баллы студентов:
         отправляйте ссылку только тем, кому эти данные положены.</p>
