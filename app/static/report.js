@@ -9,6 +9,11 @@ function formatDate(seconds) {
   return new Date(seconds * 1000).toLocaleString("ru-RU", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
 }
 
+// срок ссылки на результаты: null — постоянная, до отзыва
+function lifetimeText(expires) {
+  return expires === null ? "постоянная, открывается до отзыва" : `открывается до ${formatDate(expires)}`;
+}
+
 function escapeHtml(text) {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }

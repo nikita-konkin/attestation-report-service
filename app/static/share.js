@@ -37,7 +37,7 @@ async function start() {
   const report = await (await shared(`${BASE}/api/shared`)).json();
   showReport(report.markdown, report.downloads, report.data, download);
   document.title = `${report.title} — результаты аттестации`;
-  $("share-until").textContent = `Ссылка открывается до ${formatDate(report.expires)}.`;
+  $("share-until").textContent = `Ссылка ${lifetimeText(report.expires)}.`;
   $("stamp-department").textContent = report.data ? report.data.department : "—";
   $("stamp-period").textContent = report.data ? report.data.title : "—";
   $("stamp-date").textContent = new Date(report.created * 1000).toLocaleDateString("ru-RU");

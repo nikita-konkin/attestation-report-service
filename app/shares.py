@@ -1,7 +1,8 @@
 """Links to a report's results that open without a login.
 
 A teacher shares a finished report: /attestation/share#<token> shows the same sections, charts and
-files without a RITM login until the link expires (1, 3 or 7 days) or its owner revokes it.
+files without a RITM login until the link expires (1, 3 or 7 days) or its owner revokes it. A link
+can also be permanent, from the start or later from the owner's list; it then lasts until revoked.
 
 - the token is 256 random bits and travels after «#»: browsers never send that part of the address,
   so it reaches neither the nginx logs nor a Referer header; the page passes it in X-Share-Token;
@@ -20,13 +21,13 @@ import secrets
 import shutil
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-LIFETIMES_DAYS = (1, 3, 7)
+LIFETIMES_DAYS = (1, 3, 7, None)  # None: permanent, until the owner revokes the link
 MAX_PER_OWNER = 20
 TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9_-]{43}$")  # secrets.token_urlsafe(32)
 ID_PATTERN = re.compile(r"^[0-9a-f]{64}$")
@@ -48,12 +49,12 @@ class Share:
     owner: str
     title: str
     created: float  # Unix time, not monotonic: shares outlive restarts
-    expires: float
+    expires: Optional[float]  # None for a permanent link
     files: dict[str, str]  # key -> file name in FILES_DIR
     sizes: dict[str, int]
 
     def expired(self, now: Optional[float] = None) -> bool:
-        return (time.time() if now is None else now) >= self.expires
+        return self.expires is not None and (time.time() if now is None else now) >= self.expires
 
     def file(self, key: str) -> Optional[Path]:
         name = self.files.get(key)
@@ -87,11 +88,11 @@ class ShareStore:
         markdown: str,
         data: Optional[dict],
         files: dict[str, Path],
-        days: int,
+        days: Optional[int],
     ) -> tuple[str, Share]:
         """A new link to a copy of these results; returns the token (shown once) and the share."""
         if days not in LIFETIMES_DAYS:
-            raise ShareRejected("Срок ссылки — 1, 3 или 7 дней.")
+            raise ShareRejected("Срок ссылки — 1, 3 или 7 дней либо бессрочно.")
         with self._lock:
             if len(self.owned_by(owner)) >= MAX_PER_OWNER:
                 raise ShareRejected(f"У вас уже {MAX_PER_OWNER} действующих ссылок. Отзовите ненужные.")
@@ -102,7 +103,7 @@ class ShareStore:
                 owner=owner,
                 title=title,
                 created=time.time(),
-                expires=time.time() + days * 24 * 3600,
+                expires=None if days is None else time.time() + days * 24 * 3600,
                 files={key: path.name for key, path in files.items()},
                 sizes={key: path.stat().st_size for key, path in files.items()},
             )
@@ -114,8 +115,7 @@ class ShareStore:
                 (draft / MARKDOWN_FILE).write_text(markdown, encoding="utf-8")
                 if data is not None:
                     (draft / DATA_FILE).write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-                meta = {key: getattr(share, key) for key in ("owner", "title", "created", "expires", "files", "sizes")}
-                (draft / META_FILE).write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+                self._write_meta(draft, share)
                 draft.rename(share.folder)
             except BaseException:
                 shutil.rmtree(draft, ignore_errors=True)
@@ -131,7 +131,7 @@ class ShareStore:
                 owner=meta["owner"],
                 title=meta["title"],
                 created=float(meta["created"]),
-                expires=float(meta["expires"]),
+                expires=None if meta["expires"] is None else float(meta["expires"]),
                 files=dict(meta["files"]),
                 sizes={key: int(size) for key, size in meta["sizes"].items()},
             )
@@ -161,6 +161,25 @@ class ShareStore:
         now = time.time()
         shares = [share for share in self._shares() if share.owner == owner and not share.expired(now)]
         return sorted(shares, key=lambda share: share.created, reverse=True)
+
+    def make_permanent(self, owner: str, ident: str) -> Optional[Share]:
+        """Drop the expiry of the owner's live link; None when there is no such link."""
+        if not ID_PATTERN.match(ident or ""):
+            return None
+        with self._lock:
+            share = self._load(self.root / ident)
+            if share is None or share.owner != owner or share.expired():
+                return None
+            share = replace(share, expires=None)
+            self._write_meta(share.folder, share)
+        return share
+
+    @staticmethod
+    def _write_meta(folder: Path, share: Share) -> None:
+        meta = {key: getattr(share, key) for key in ("owner", "title", "created", "expires", "files", "sizes")}
+        draft = folder / (META_FILE + ".new")
+        draft.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+        draft.replace(folder / META_FILE)  # atomic: a reader sees the old expiry or the new one
 
     def revoke(self, owner: str, ident: str) -> bool:
         if not ID_PATTERN.match(ident or ""):

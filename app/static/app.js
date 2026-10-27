@@ -8,6 +8,8 @@ const LAST_DEPARTMENT = "attestation.department";
 let csrf = "";
 let faculties = [];
 let currentJob = null;  // готовая задача, которой можно поделиться ссылкой
+const PERMANENT_WARNING = "Ссылка станет постоянной: страница с ФИО и баллами студентов будет открываться " +
+  "у всех, у кого она есть, пока вы её не отзовёте. Сделать постоянной?";
 
 function fillYears(current) {
   const select = document.getElementById("year");
@@ -253,6 +255,7 @@ async function requestReport(event) {
 }
 
 function daysLabel(days) {
+  if (days === null) return "бессрочно";
   const last = days % 10, tens = days % 100;
   const word = last === 1 && tens !== 11 ? "день" : last >= 2 && last <= 4 && (tens < 12 || tens > 14) ? "дня" : "дней";
   return `${days} ${word}`;
@@ -263,7 +266,19 @@ function renderShares(shares) {
   $("share-list").replaceChildren(...shares.map(share => {
     const row = el("div", "share-item");
     const text = el("div", "share-text");
-    text.append(el("span", "share-title", share.title), el("small", "", `открывается до ${formatDate(share.expires)}`));
+    text.append(el("span", "share-title", share.title), el("small", "", lifetimeText(share.expires)));
+    const actions = el("div", "share-actions");
+    if (share.expires !== null) {
+      const keep = el("button", "link-btn", "Сделать постоянной");
+      keep.type = "button";
+      keep.addEventListener("click", guarded(async () => {
+        if (!window.confirm(PERMANENT_WARNING)) return;
+        keep.disabled = true;
+        await api(`/api/shares/${encodeURIComponent(share.id)}/permanent`, { method: "POST" });
+        await loadShares();
+      }));
+      actions.appendChild(keep);
+    }
     const revoke = el("button", "link-btn", "Отозвать");
     revoke.type = "button";
     revoke.addEventListener("click", guarded(async () => {
@@ -271,7 +286,8 @@ function renderShares(shares) {
       await api(`/api/shares/${encodeURIComponent(share.id)}`, { method: "DELETE" });
       await loadShares();
     }));
-    row.append(text, revoke);
+    actions.appendChild(revoke);
+    row.append(text, actions);
     return row;
   }));
 }
@@ -279,7 +295,7 @@ function renderShares(shares) {
 async function loadShares() {
   const { lifetimes, shares } = await api("/api/shares");
   const select = $("share-days");
-  if (!select.options.length) lifetimes.forEach(days => select.add(new Option(daysLabel(days), days)));
+  if (!select.options.length) lifetimes.forEach(days => select.add(new Option(daysLabel(days), days === null ? "" : days)));
   renderShares(shares);
 }
 
@@ -291,10 +307,11 @@ async function createShare() {
   try {
     const share = await api(`/api/jobs/${encodeURIComponent(currentJob.id)}/share`, {
       method: "POST",
-      body: JSON.stringify({ days: Number($("share-days").value) }),
+      body: JSON.stringify({ days: $("share-days").value === "" ? null : Number($("share-days").value) }),
     });
     $("share-url").value = new URL(share.link, window.location.origin).href;
-    $("share-until").textContent = `Открывается до ${formatDate(share.expires)}. Ссылка показывается только сейчас — сохраните её.`;
+    const lifetime = lifetimeText(share.expires);
+    $("share-until").textContent = `Ссылка ${lifetime}. Она показывается только сейчас — сохраните её.`;
     $("share-copy").textContent = "Копировать";
     $("share-made").hidden = false;
     $("share-url").select();

@@ -6,7 +6,7 @@ page the teacher picks the period, faculty, department and its directions of gro
 some groups of them), and the service builds the reports from the portal's data.
 
 A finished report can be shared: /attestation/share#<token> shows it without a login until the
-link expires or is revoked (see shares.py).
+link expires or is revoked; a link can be permanent (see shares.py).
 """
 
 from __future__ import annotations
@@ -108,7 +108,7 @@ class JobRequest(BaseModel):
 
 
 class ShareRequest(BaseModel):
-    days: int
+    days: Optional[int]  # None: a permanent link
 
 
 def current_defaults(today: Optional[datetime] = None) -> tuple[int, bool]:
@@ -405,7 +405,8 @@ def create_app(settings: Settings, portal: Any = None) -> FastAPI:
             token, share = shares.create(session.login, job.title, job.markdown or "", job.data, job.files, body.days)
         except ShareRejected as error:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(error)) from None
-        logger.info("Share %s created by %s for %d days: %s", share.id[:8], session.login, body.days, job.title)
+        lifetime = "permanently" if body.days is None else f"for {body.days} days"
+        logger.info("Share %s created by %s %s: %s", share.id[:8], session.login, lifetime, job.title)
         # the token is shown once: the server keeps only its hash
         return {"link": f"{BASE}/share#{token}", **share.public()}
 
@@ -413,6 +414,15 @@ def create_app(settings: Settings, portal: Any = None) -> FastAPI:
     def my_shares(request: Request):
         session = require_session(request)
         return {"lifetimes": LIFETIMES_DAYS, "shares": [share.public() for share in shares.owned_by(session.login)]}
+
+    @app.post(BASE + "/api/shares/{share_id}/permanent")
+    def make_share_permanent(request: Request, share_id: str):
+        session = require_session(request, check_csrf=True)
+        share = shares.make_permanent(session.login, share_id)
+        if share is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Ссылка не найдена: возможно, она уже истекла.")
+        logger.info("Share %s made permanent by %s", share_id[:8], session.login)
+        return share.public()
 
     @app.delete(BASE + "/api/shares/{share_id}", status_code=status.HTTP_204_NO_CONTENT)
     def revoke_share(request: Request, share_id: str):
