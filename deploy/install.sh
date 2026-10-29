@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Первая установка на 192.168.50.117 (от имени liam): сервис уходит из ssl-nginx-docker в свой
+# Первая установка на сервере сайта (от имени пользователя с sudo): сервис уходит из ssl-nginx-docker в свой
 # репозиторий и свой compose, nginx начинает вести /attestation прямо на него, без java-gateway.
 #   git clone https://github.com/nikita-konkin/attestation-report-service.git ~/projects/attestation-report-service
 #   bash ~/projects/attestation-report-service/deploy/install.sh

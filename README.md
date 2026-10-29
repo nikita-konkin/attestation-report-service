@@ -85,18 +85,19 @@ docker compose -f docker-compose.yml -f docker-compose.local.yml up --build
 
 ## Сервер
 
-192.168.50.117, папка `~/projects/attestation-report-service`, контейнер в сети `mynetwork` рядом с nginx
+Сервер сайта в локальной сети, папка `~/projects/attestation-report-service`, контейнер в сети `mynetwork` рядом с nginx
 сайта ([deploy/server.yml](deploy/server.yml)). Первая установка переносит сервис из `ssl-nginx-docker`
-и переключает nginx ([deploy/install.sh](deploy/install.sh)):
+и переключает nginx ([deploy/install.sh](deploy/install.sh)). В командах ниже `<пользователь>@<сервер>` —
+учётная запись с sudo на этом сервере и его адрес:
 
 ```sh
-ssh -t liam@192.168.50.117 'git clone https://github.com/nikita-konkin/attestation-report-service.git ~/projects/attestation-report-service && bash ~/projects/attestation-report-service/deploy/install.sh'
+ssh -t <пользователь>@<сервер> 'git clone https://github.com/nikita-konkin/attestation-report-service.git ~/projects/attestation-report-service && bash ~/projects/attestation-report-service/deploy/install.sh'
 ```
 
 Обновление с `main` — [deploy/update.sh](deploy/update.sh), основной сайт при этом не пересобирается:
 
 ```sh
-ssh -t liam@192.168.50.117 'bash ~/projects/attestation-report-service/deploy/update.sh'
+ssh -t <пользователь>@<сервер> 'bash ~/projects/attestation-report-service/deploy/update.sh'
 ```
 
 ### Автообновление (CD)
@@ -110,7 +111,7 @@ ssh -t liam@192.168.50.117 'bash ~/projects/attestation-report-service/deploy/up
 Включается один раз, с паролем sudo ([deploy/install-autoupdate.sh](deploy/install-autoupdate.sh)):
 
 ```sh
-ssh -t liam@192.168.50.117 'git -C ~/projects/attestation-report-service pull -q --ff-only origin main && bash ~/projects/attestation-report-service/deploy/install-autoupdate.sh'
+ssh -t <пользователь>@<сервер> 'git -C ~/projects/attestation-report-service pull -q --ff-only origin main && bash ~/projects/attestation-report-service/deploy/install-autoupdate.sh'
 ```
 
 Журнал — `journalctl -u attestation-autoupdate`, выключить — `sudo systemctl disable --now attestation-autoupdate.timer`.

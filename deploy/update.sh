@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Обновление «Отчёта по аттестации» на 192.168.50.117 после установки (deploy/install.sh):
+# Обновление «Отчёта по аттестации» на сервере сайта после установки (deploy/install.sh):
 #   bash ~/projects/attestation-report-service/deploy/update.sh            # ветка main
 #   bash ~/projects/attestation-report-service/deploy/update.sh my-branch  # другая ветка
 # Спросит пароль sudo. Основной сервис сайта и шлюз не пересобираются.
