@@ -45,6 +45,7 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 STATIC_FILES = {
     "app.js": "text/javascript; charset=utf-8",
     "charts.js": "text/javascript; charset=utf-8",
+    "count.js": "text/javascript; charset=utf-8",
     "report.js": "text/javascript; charset=utf-8",
     "share.js": "text/javascript; charset=utf-8",
     "style.css": "text/css; charset=utf-8",
@@ -64,7 +65,8 @@ NETWORK_ERRORS = {"ConnectionError", "Timeout", "ReadTimeout", "ConnectTimeout",
 SECURITY_HEADERS = {
     "Content-Security-Policy": (
         "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
-        "connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
+        "connect-src 'self' https://volgatech-itrc.goatcounter.com; "
+        "form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
     ),
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
