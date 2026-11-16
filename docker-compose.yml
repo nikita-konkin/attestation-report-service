@@ -1,4 +1,4 @@
-# «Отчёт по аттестации» — отдельный сервис сайта пгту-ртф.рф.
+# «Отчёт по аттестации» — отдельный сервис сайта volgatech-itrc.ru.
 # Наружу порт не открыт: страницу /attestation отдаёт nginx сайта (deploy/nginx-location.conf).
 #   локально:    docker compose -f docker-compose.yml -f docker-compose.local.yml up --build
 #   на сервере:  docker compose -f docker-compose.yml -f deploy/server.yml up -d --build

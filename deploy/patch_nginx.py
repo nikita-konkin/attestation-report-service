@@ -1,4 +1,4 @@
-"""Add location /attestation (deploy/nginx-location.conf) to the HTTPS block of пгту-ртф.рф.
+"""Add location /attestation (deploy/nginx-location.conf) to the HTTPS block of volgatech-itrc.ru.
 
 usage: patch_nginx.py SOURCE TARGET; writes TARGET, unchanged when the location is already there.
 """
@@ -6,7 +6,7 @@ usage: patch_nginx.py SOURCE TARGET; writes TARGET, unchanged when the location 
 import sys
 from pathlib import Path
 
-DOMAIN = "server_name пгту-ртф.рф xn----etb9agicel.xn--p1ai;"
+DOMAIN = "server_name volgatech-itrc.ru www.volgatech-itrc.ru;"
 MARK = "location /attestation"
 BLOCK = (Path(__file__).parent / "nginx-location.conf").read_text(encoding="utf-8")
 
