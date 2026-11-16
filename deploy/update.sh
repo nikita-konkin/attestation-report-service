@@ -11,7 +11,7 @@ BRANCH=${1:-main}
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/.." && pwd)
 CONTAINER=attestation-report
-DOMAIN=xn----etb9agicel.xn--p1ai
+DOMAIN=volgatech-itrc.ru
 if [ "$(id -u)" = 0 ]; then
     SUDO=()
     GIT=(runuser -u "$(stat -c %U "$REPO")" -- git -C "$REPO")
@@ -61,5 +61,5 @@ echo "LibreOffice в контейнере: ${office:-не найден — PDF �
 [ "$page" = 200 ] && [ "$charts" = 200 ] || { echo "что-то не так — см. выше"; exit 1; }
 
 echo
-echo "Готово: https://пгту-ртф.рф/attestation"
+echo "Готово: https://volgatech-itrc.ru/attestation"
 echo "Откат: git -C $REPO checkout -q -B main $PREVIOUS && cd $REPO && sudo docker compose -f docker-compose.yml -f deploy/server.yml up -d --build"

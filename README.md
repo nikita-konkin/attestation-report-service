@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/nikita-konkin/attestation-report-service/actions/workflows/ci.yml/badge.svg)](https://github.com/nikita-konkin/attestation-report-service/actions/workflows/ci.yml)
 
-«Отчёт по аттестации» на сайте [пгту-ртф.рф/attestation](https://xn----etb9agicel.xn--p1ai/attestation):
+«Отчёт по аттестации» на сайте [volgatech-itrc.ru/attestation](https://volgatech-itrc.ru/attestation):
 отчёты об аттестации групп кафедры по данным портала РИТМ. Вход — учётной записью РИТМ, своих
 учётных записей у сервиса нет.
 

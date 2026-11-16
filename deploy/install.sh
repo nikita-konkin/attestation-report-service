@@ -13,7 +13,7 @@ NGINX=$HOME/projects/ssl-nginx-docker
 OLD_CONTAINER=diploma-python-attestation-engine
 CONTAINER=attestation-report
 VOLUME=${ATTESTATION_VOLUME:-ssl-nginx-docker_attestation-data}
-DOMAIN=xn----etb9agicel.xn--p1ai
+DOMAIN=volgatech-itrc.ru
 STAMP=$(date +%Y%m%d-%H%M%S)
 COMPOSE=(sudo docker compose -f "$REPO/docker-compose.yml" -f "$REPO/deploy/server.yml")
 
@@ -95,7 +95,7 @@ echo "LibreOffice в контейнере: ${office:-не найден — PDF �
 [ "$page" = 200 ] && [ "$charts" = 200 ] && [ "$health" = 200 ] || { echo "что-то не так — см. выше"; exit 1; }
 
 echo
-echo "Готово: https://пгту-ртф.рф/attestation отдаёт $CONTAINER напрямую."
+echo "Готово: https://volgatech-itrc.ru/attestation отдаёт $CONTAINER напрямую."
 echo "Дальше обновления — bash $REPO/deploy/update.sh"
 if [ -f "$NGINX/nginx/nginx.conf.bak-$STAMP" ]; then
     echo "Откат nginx: cat $NGINX/nginx/nginx.conf.bak-$STAMP > $NGINX/nginx/nginx.conf && sudo docker exec nginx nginx -s reload"
